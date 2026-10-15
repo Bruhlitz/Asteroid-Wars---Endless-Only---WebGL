@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Asteroid Wars: Score Rush</title>
+    <style>
+      /* The arcade edition's page (Batch 122). The game fills whatever window or frame it is given: an arcade site
+         puts it in a frame of its own size, and a phone gives it the whole screen. Nothing on the page scrolls,
+         zooms or selects, because every drag and tap on it is the game's. */
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+      body { position: fixed; inset: 0; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; font-family: "Bahnschrift", "DIN Alternate", "Roboto Condensed", "Arial Narrow", Arial, sans-serif; }
+      #unity-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; background: #000; outline: none; touch-action: none; }
+      #aw-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; color: #dbf5ff; text-align: center; }
+      #aw-title { font-size: clamp(28px, 7vw, 84px); font-weight: 700; letter-spacing: 0.08em; color: #fff; text-shadow: 0 0 18px rgba(51, 242, 255, 0.55), 3px 3px 0 #0d0820; }
+      #aw-mode { margin-top: 0.4em; font-size: clamp(14px, 2.6vw, 30px); font-weight: 700; letter-spacing: 0.3em; color: #99ff40; }
+      #aw-bar { margin-top: 2.2em; width: min(70vw, 520px); height: 8px; background: rgba(255, 255, 255, 0.1); }
+      #aw-fill { width: 0%; height: 100%; background: #33f2ff; transition: width 0.15s linear; }
+      #aw-note { margin-top: 1.1em; font-size: clamp(11px, 1.5vw, 16px); letter-spacing: 0.22em; color: #80dbff; min-height: 1.4em; padding: 0 1em; }
+      #aw-note.bad { color: #ff5c4d; letter-spacing: 0.08em; }
+      /* A phone held upright: the game is flown sideways. */
+      #aw-turn { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: #000; color: #99ff40; font-size: 5.5vw; font-weight: 700; letter-spacing: 0.16em; text-align: center; padding: 0 8vw; z-index: 10; }
+      @media (orientation: portrait) and (max-width: 820px) and (pointer: coarse) { #aw-turn { display: flex; } }
+    </style>
+  </head>
+  <body>
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <div id="aw-loading">
+      <div id="aw-title">ASTEROID WARS</div>
+      <div id="aw-mode">SCORE RUSH</div>
+      <div id="aw-bar"><div id="aw-fill"></div></div>
+      <div id="aw-note">LOADING</div>
+    </div>
+    <div id="aw-turn">TURN YOUR PHONE SIDEWAYS TO FLY</div>
+    <script>
+      var canvas = document.querySelector("#unity-canvas");
+      var note = document.querySelector("#aw-note");
+
+      // The game's right mouse button is the engine: the browser's own menu must not answer it.
+      canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+      // Keys the game uses that a page would otherwise scroll with, or walk its focus away with.
+      window.addEventListener("keydown", function (e) {
+        if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].indexOf(e.code) >= 0) e.preventDefault();
+      });
+
+      function awProblem(words) {
+        note.className = "bad";
+        note.textContent = words;
+      }
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/Arcade-WebGL.loader.js";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/Arcade-WebGL.data.unityweb",
+        frameworkUrl: buildUrl + "/Arcade-WebGL.framework.js.unityweb",
+        codeUrl: buildUrl + "/Arcade-WebGL.wasm.unityweb",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "DefaultCompany",
+        productName: "Asteroid Wars",
+        productVersion: "1.0",
+        // A warning from the engine is not put on the page: this page has nowhere to put one that a player should read.
+        showBanner: function (msg, type) { if (type === "error") awProblem(String(msg).replace(/<[^>]*>/g, " ")); else console.warn(msg); },
+      };
+
+      // The save. The game keeps its best score, the pilot's initials and the options in files, and in a browser
+      // those files live in the browser's own storage for this site. This line has every write to them kept.
+      config.autoSyncPersistentDataPath = true;
+
+      // A phone's screen has three or four dots to a point: drawing every one of them costs more than it shows.
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) config.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = function () {
+        createUnityInstance(canvas, config, function (progress) {
+          document.querySelector("#aw-fill").style.width = Math.round(100 * progress) + "%";
+          if (progress >= 0.9) note.textContent = "STARTING";
+        }).then(function (unityInstance) {
+          document.querySelector("#aw-loading").style.display = "none";
+          window.awGame = unityInstance;
+          canvas.focus();
+        }).catch(function (message) {
+          awProblem("THE GAME COULD NOT START HERE. TRY ANOTHER BROWSER. (" + message + ")");
+        });
+      };
+      script.onerror = function () { awProblem("THE GAME'S FILES COULD NOT BE REACHED."); };
+      document.body.appendChild(script);
+
+      // A click or a tap anywhere on the page gives the game the keyboard: inside a site's frame it does not have it until then.
+      document.addEventListener("pointerdown", function () { canvas.focus(); });
+    </script>
+  </body>
+</html>
